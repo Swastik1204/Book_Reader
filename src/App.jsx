@@ -12,6 +12,7 @@ function App() {
   const [authed, setAuthed] = useState(false)
   const [files, setFiles] = useState([])
   const [currentUrl, setCurrentUrl] = useState(null)
+  const [sidebarOpen, setSidebarOpen] = useState(false)
   const containerRef = useRef(null)
 
   // Demo content (replace with file import/loader later)
@@ -54,8 +55,12 @@ function App() {
   return (
     <div className={`min-h-screen ${themeClasses} flex flex-col`}> 
       {/* Top bar */}
-      <header className="sticky top-0 z-20 backdrop-blur supports-[backdrop-filter]:bg-white/60 border-b border-neutral-200 dark:supports-[backdrop-filter]:bg-neutral-900/60 dark:border-neutral-800">
-        <div className="mx-auto max-w-4xl px-3 sm:px-4 lg:px-6 py-2 flex items-center gap-3">
+      <header className="sticky top-0 z-30 backdrop-blur supports-[backdrop-filter]:bg-white/60 border-b border-neutral-200 dark:supports-[backdrop-filter]:bg-neutral-900/60 dark:border-neutral-800">
+        <div className="mx-auto max-w-6xl px-3 sm:px-4 lg:px-6 py-2 flex items-center gap-3">
+          <button onClick={() => setSidebarOpen((s) => !s)} aria-label="Toggle library"
+            className="md:hidden inline-flex items-center justify-center w-9 h-9 rounded-md border border-neutral-300 dark:border-neutral-700 hover:bg-neutral-50 dark:hover:bg-neutral-800">
+            ☰
+          </button>
           <h1 className="text-base sm:text-lg font-semibold">Book Reader</h1>
           <div className="ml-auto flex items-center gap-2 sm:gap-3">
             {!authed ? (
@@ -96,44 +101,73 @@ function App() {
       </header>
 
       {/* Reader area */}
-      <main className="mx-auto w-full max-w-6xl flex-1 px-3 sm:px-4 lg:px-6 py-2 sm:py-4 grid gap-3">
-        {/* Library bar (only when authed) */}
-        {authed && (
-          <div className="flex items-center gap-2 overflow-x-auto py-1">
-            <input type="file" accept="application/pdf" onChange={async (e) => {
-              const f = e.target.files?.[0]
-              if (f) {
-                try { await uploadPdf(f); const list = await listPdfs(); setFiles(list) } catch (err) { console.error(err) }
-              }
-            }}
-            className="text-sm" />
-            <div className="flex items-center gap-2">
-              {files.map(f => (
-                <button key={f.id} onClick={async () => {
-                  const url = await getPdfObjectUrl(f.id); setCurrentUrl(url)
-                }}
-                  className="px-2 py-1 rounded border text-sm hover:bg-neutral-50 dark:hover:bg-neutral-800">
-                  {f.name}
-                </button>
-              ))}
+      <main className="mx-auto w-full max-w-6xl flex-1 px-0 sm:px-4 lg:px-6 py-0 sm:py-4">
+        <div className="flex min-h-[calc(100vh-7rem)]">
+          {/* Sidebar */}
+          <aside className={`fixed inset-y-0 left-0 z-40 w-72 transform bg-white dark:bg-neutral-900 border-r border-neutral-200 dark:border-neutral-800 p-3 transition-transform duration-200 ease-out md:relative md:translate-x-0 md:w-64 ${sidebarOpen ? 'translate-x-0' : '-translate-x-full'}`}>
+            <div className="flex items-center justify-between mb-2">
+              <div className="font-semibold">Library</div>
+              <button onClick={() => setSidebarOpen(false)} className="md:hidden px-2 py-1 rounded border text-sm">Close</button>
             </div>
-          </div>
-        )}
+            {!authed ? (
+              <p className="text-sm text-neutral-600 dark:text-neutral-400">Sign in to access your Drive.</p>
+            ) : (
+              <>
+                <div className="mb-2 flex items-center gap-2">
+                  <label className="inline-flex items-center px-2 py-1 rounded border cursor-pointer text-sm">
+                    Upload
+                    <input type="file" accept="application/pdf" className="hidden" onChange={async (e) => {
+                      const f = e.target.files?.[0]
+                      if (f) {
+                        try { await uploadPdf(f); const list = await listPdfs(); setFiles(list) } catch (err) { console.error(err) }
+                      }
+                    }} />
+                  </label>
+                  <button onClick={async () => { const list = await listPdfs(); setFiles(list) }} className="px-2 py-1 rounded border text-sm">Refresh</button>
+                </div>
+                <div className="overflow-y-auto pr-1" style={{ maxHeight: 'calc(100vh - 11rem)' }}>
+                  {files.length === 0 ? (
+                    <p className="text-sm text-neutral-500">No PDFs in Book_Reader</p>
+                  ) : (
+                    <ul className="space-y-1">
+                      {files.map(f => (
+                        <li key={f.id}>
+                          <button
+                            onClick={async () => { const url = await getPdfObjectUrl(f.id); setCurrentUrl(url); setSidebarOpen(false) }}
+                            className="w-full text-left px-2 py-2 rounded hover:bg-neutral-50 dark:hover:bg-neutral-800 border border-transparent hover:border-neutral-200 dark:hover:border-neutral-700 text-sm truncate">
+                            {f.name}
+                          </button>
+                        </li>
+                      ))}
+                    </ul>
+                  )}
+                </div>
+              </>
+            )}
+          </aside>
+
+          {/* Content area */}
+          <section className="flex-1 min-w-0 md:ml-0 ml-0 md:pl-6 md:pr-0 p-3 sm:p-4 md:p-6 md:pl-6 md:ml-64">
+            <div className="md:hidden sticky top-12 z-20 px-3 py-2">
+              <button onClick={() => setSidebarOpen(true)} className="px-3 py-1.5 rounded border text-sm">Open Library</button>
+            </div>
         {/* Single-column on phones; centered content with comfortable measure */}
-        {currentUrl ? (
-          <div className="w-full h-[70vh] sm:h-[78vh] border rounded-lg overflow-hidden">
-            <iframe title="PDF Viewer" src={currentUrl} className="w-full h-full" />
-          </div>
-        ) : (
-          <article
-            ref={containerRef}
-            className="max-w-none selection:bg-indigo-200/60 selection:text-indigo-900"
-            style={{ fontSize: `${fontSize}px`, lineHeight: lineHeight, padding: `${margin}px` }}
-          >
-            <h2 className="text-xl sm:text-2xl mb-2">Chapter {page + 1}</h2>
-            <p className="whitespace-pre-wrap">{pages[page] || ''}</p>
-          </article>
-        )}
+            {currentUrl ? (
+              <div className="w-full h-[70vh] sm:h-[78vh] border rounded-lg overflow-hidden">
+                <iframe title="PDF Viewer" src={currentUrl} className="w-full h-full" />
+              </div>
+            ) : (
+              <article
+                ref={containerRef}
+                className="max-w-none selection:bg-indigo-200/60 selection:text-indigo-900"
+                style={{ fontSize: `${fontSize}px`, lineHeight: lineHeight, padding: `${margin}px` }}
+              >
+                <h2 className="text-xl sm:text-2xl mb-2">Chapter {page + 1}</h2>
+                <p className="whitespace-pre-wrap">{pages[page] || ''}</p>
+              </article>
+            )}
+          </section>
+        </div>
       </main>
 
       {/* Bottom controls, mobile friendly */}
