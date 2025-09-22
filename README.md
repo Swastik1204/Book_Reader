@@ -1,12 +1,54 @@
-# React + Vite
+# Book Reader (Vite + React + Tailwind + PWA)
 
-This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
+A responsive PWA book reader that connects to Google Drive and lists/opens PDFs from a Drive folder named `Book_Reader`. Optimized for phones and tablets.
 
-Currently, two official plugins are available:
+## Features
+- Offline-capable PWA with install support (via `vite-plugin-pwa`)
+- Mobile-first responsive reader UI with Tailwind CSS
+- Google Identity Services (OAuth2) authentication
+- Google Drive integration:
+  - Ensures/uses a folder `Book_Reader`
+  - List PDFs, upload PDFs, view selected PDF
+- Light/Dark theme toggle and basic reading controls (font size, line height, margin)
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Babel](https://babeljs.io/) for Fast Refresh
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/) for Fast Refresh
+## Quickstart
+1. Install deps
+	```powershell
+	npm install
+	```
+2. Copy `.env.example` to `.env` and set `VITE_GOOGLE_CLIENT_ID`
+3. Dev server
+	```powershell
+	npm run dev
+	```
+4. Build + preview (tests PWA service worker)
+	```powershell
+	npm run build
+	npm run preview
+	```
 
-## Expanding the ESLint configuration
+## Google Cloud setup
+1. Create a Google Cloud project and enable the Drive API.
+2. Create OAuth 2.0 Client ID (Web application) in Credentials.
+3. Add Authorized JavaScript origins (e.g., `http://localhost:5173` and your deploy URL).
+4. Copy the Client ID to `.env` as `VITE_GOOGLE_CLIENT_ID`.
 
-If you are developing a production application, we recommend using TypeScript with type-aware lint rules enabled. Check out the [TS template](https://github.com/vitejs/vite/tree/main/packages/create-vite/template-react-ts) for information on how to integrate TypeScript and [`typescript-eslint`](https://typescript-eslint.io) in your project.
+Permissions used:
+- `drive.readonly` (list/read user Drive files)
+- `drive.file` (create/manage files created by this app; used for uploads to `Book_Reader`)
+
+## Folder strategy in Drive
+- A folder named `Book_Reader` is created/used in the user’s My Drive.
+- PDFs uploaded via the app go into this folder.
+- The library view lists all non-trashed PDFs from this folder.
+
+## Notes
+- The built-in PDF viewer uses the browser’s native PDF rendering via `iframe` blob URLs.
+- For advanced features (bookmarks, annotations, text selection), integrate a PDF viewer library (PDF.js) later.
+
+## Tech
+- Vite + React (SWC)
+- Tailwind CSS v4
+- vite-plugin-pwa
+- Google Identity Services (GIS)
+

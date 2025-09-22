@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
+import { initAuth, signIn, signOut, listPdfs, getPdfObjectUrl, uploadPdf } from './services/googleDrive'
 import './App.css'
 
 function App() {
@@ -8,15 +9,21 @@ function App() {
   const [dark, setDark] = useState(false)
   const [text, setText] = useState(null)
   const [page, setPage] = useState(0)
+  const [authed, setAuthed] = useState(false)
+  const [files, setFiles] = useState([])
+  const [currentUrl, setCurrentUrl] = useState(null)
   const containerRef = useRef(null)
 
   // Demo content (replace with file import/loader later)
+  // Initialize GIS script early
+  useEffect(() => { initAuth().catch(() => {}) }, [])
+
+  // Demo fallback text if no PDF selected
   useEffect(() => {
     const sample = `Chapter 1\n\n` +
-      `It was a bright cold day in April, and the clocks were striking thirteen. ` +
-      `Winston Smith, his chin nuzzled into his breast in an effort to escape the vile wind, ` +
-      `slipped quickly through the glass doors of Victory Mansions...`;
-    setText(sample.repeat(12))
+      `Welcome to Book Reader. Sign in with Google to access your Drive folder \n` +
+      `Book_Reader and choose a PDF. You can also upload a PDF to that folder.\n\n`;
+    setText(sample.repeat(8))
   }, [])
 
   const pages = useMemo(() => {
@@ -51,6 +58,23 @@ function App() {
         <div className="mx-auto max-w-4xl px-3 sm:px-4 lg:px-6 py-2 flex items-center gap-3">
           <h1 className="text-base sm:text-lg font-semibold">Book Reader</h1>
           <div className="ml-auto flex items-center gap-2 sm:gap-3">
+            {!authed ? (
+              <button onClick={async () => { try { await signIn(); setAuthed(true); const list = await listPdfs(); setFiles(list) } catch (e) { console.error(e) } }}
+                className="px-3 py-1.5 rounded-md text-sm border border-neutral-300 dark:border-neutral-700 hover:bg-neutral-50 dark:hover:bg-neutral-800">
+                Sign in
+              </button>
+            ) : (
+              <>
+                <button onClick={async () => { const list = await listPdfs(); setFiles(list) }}
+                  className="px-3 py-1.5 rounded-md text-sm border border-neutral-300 dark:border-neutral-700 hover:bg-neutral-50 dark:hover:bg-neutral-800">
+                  Refresh
+                </button>
+                <button onClick={async () => { await signOut(); setAuthed(false); setFiles([]); setCurrentUrl(null) }}
+                  className="px-3 py-1.5 rounded-md text-sm border border-neutral-300 dark:border-neutral-700 hover:bg-neutral-50 dark:hover:bg-neutral-800">
+                  Sign out
+                </button>
+              </>
+            )}
             <button onClick={() => setDark((d) => !d)}
               className="px-3 py-1.5 rounded-md text-sm border border-neutral-300 dark:border-neutral-700 hover:bg-neutral-50 dark:hover:bg-neutral-800">
               {dark ? 'Light' : 'Dark'}
@@ -72,22 +96,44 @@ function App() {
       </header>
 
       {/* Reader area */}
-      <main className="mx-auto w-full max-w-4xl flex-1 px-3 sm:px-4 lg:px-6 py-2 sm:py-4 grid">
+      <main className="mx-auto w-full max-w-6xl flex-1 px-3 sm:px-4 lg:px-6 py-2 sm:py-4 grid gap-3">
+        {/* Library bar (only when authed) */}
+        {authed && (
+          <div className="flex items-center gap-2 overflow-x-auto py-1">
+            <input type="file" accept="application/pdf" onChange={async (e) => {
+              const f = e.target.files?.[0]
+              if (f) {
+                try { await uploadPdf(f); const list = await listPdfs(); setFiles(list) } catch (err) { console.error(err) }
+              }
+            }}
+            className="text-sm" />
+            <div className="flex items-center gap-2">
+              {files.map(f => (
+                <button key={f.id} onClick={async () => {
+                  const url = await getPdfObjectUrl(f.id); setCurrentUrl(url)
+                }}
+                  className="px-2 py-1 rounded border text-sm hover:bg-neutral-50 dark:hover:bg-neutral-800">
+                  {f.name}
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
         {/* Single-column on phones; centered content with comfortable measure */}
-        <article
-          ref={containerRef}
-          className="max-w-none selection:bg-indigo-200/60 selection:text-indigo-900"
-          style={{
-            fontSize: `${fontSize}px`,
-            lineHeight: lineHeight,
-            padding: `${margin}px`,
-          }}
-        >
-          <h2 className="text-xl sm:text-2xl mb-2">Chapter {page + 1}</h2>
-          <p className="whitespace-pre-wrap">
-            {pages[page] || ''}
-          </p>
-        </article>
+        {currentUrl ? (
+          <div className="w-full h-[70vh] sm:h-[78vh] border rounded-lg overflow-hidden">
+            <iframe title="PDF Viewer" src={currentUrl} className="w-full h-full" />
+          </div>
+        ) : (
+          <article
+            ref={containerRef}
+            className="max-w-none selection:bg-indigo-200/60 selection:text-indigo-900"
+            style={{ fontSize: `${fontSize}px`, lineHeight: lineHeight, padding: `${margin}px` }}
+          >
+            <h2 className="text-xl sm:text-2xl mb-2">Chapter {page + 1}</h2>
+            <p className="whitespace-pre-wrap">{pages[page] || ''}</p>
+          </article>
+        )}
       </main>
 
       {/* Bottom controls, mobile friendly */}
