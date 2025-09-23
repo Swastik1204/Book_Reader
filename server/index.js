@@ -2,6 +2,8 @@ import 'dotenv/config'
 import express from 'express'
 import cors from 'cors'
 import multer from 'multer'
+import path from 'path'
+import fs from 'fs'
 
 // Server-side configuration via environment variables
 const GH_OWNER = process.env.GH_OWNER || process.env.VITE_GH_OWNER
@@ -12,6 +14,12 @@ const GH_TOKEN = process.env.GH_TOKEN
 
 const app = express()
 app.use(cors())
+
+// Serve static frontend (dist folder) if it exists (Render build step produced it)
+const distDir = path.resolve(process.cwd(), 'dist')
+if (fs.existsSync(distDir)) {
+  app.use(express.static(distDir, { maxAge: '1h', extensions: ['html'] }))
+}
 
 const upload = multer({ limits: { fileSize: 1024 * 1024 * 50 } }) // 50MB cap
 
@@ -103,7 +111,18 @@ app.post('/api/upload', upload.single('file'), async (req, res) => {
   }
 })
 
+// SPA fallback: for any non-API GET request, serve index.html (only if dist exists)
+app.get(/^(?!\/api\/).*/, (req, res, next) => {
+  if (!fs.existsSync(distDir)) return next()
+  const indexFile = path.join(distDir, 'index.html')
+  if (fs.existsSync(indexFile)) return res.sendFile(indexFile)
+  next()
+})
+
 const port = process.env.PORT || 8787
 app.listen(port, () => {
   console.log(`Upload server listening on http://localhost:${port}`)
+  if (!fs.existsSync(distDir)) {
+    console.warn('Warning: dist folder not found. Root URL will 404 until frontend is built.')
+  }
 })
