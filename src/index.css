@@ -1,1 +1,6 @@
 @import "tailwindcss";
+@plugin "daisyui" {
+	/* Enable built-in and extra themes per docs */
+	themes: retro, night, cupcake;
+}
+@plugin "daisyui";

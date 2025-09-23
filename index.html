@@ -2,15 +2,27 @@
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
-  <link rel="icon" href="/pwa-192x192.png" />
-  <link rel="apple-touch-icon" href="/maskable-icon-192x192.png" />
+  <link rel="icon" href="/book.svg" />
+  <link rel="apple-touch-icon" href="/book.svg" />
   <meta name="theme-color" content="#111827" />
   <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="mobile-web-app-capable" content="yes" />
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Book Reader</title>
   </head>
   <body>
+    <script>
+      (function(){
+        try {
+          var key='br_theme';
+          var saved = localStorage.getItem(key);
+          var prefersDark = window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches;
+          var initial = saved || (prefersDark ? 'dark' : 'light');
+          document.documentElement.setAttribute('data-theme', initial);
+        } catch(e) {}
+      })();
+    </script>
     <div id="root"></div>
     <script type="module" src="/src/main.jsx"></script>
   </body>

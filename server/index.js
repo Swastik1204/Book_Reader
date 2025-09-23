@@ -1,0 +1,109 @@
+import 'dotenv/config'
+import express from 'express'
+import cors from 'cors'
+import multer from 'multer'
+
+// Server-side configuration via environment variables
+const GH_OWNER = process.env.GH_OWNER || process.env.VITE_GH_OWNER
+const GH_REPO = process.env.GH_REPO || process.env.VITE_GH_REPO
+const GH_BRANCH = process.env.GH_BRANCH || process.env.VITE_GH_BRANCH || 'main'
+const GH_PATH = process.env.GH_PATH || process.env.VITE_GH_PATH || 'pdfs'
+const GH_TOKEN = process.env.GH_TOKEN
+
+const app = express()
+app.use(cors())
+
+const upload = multer({ limits: { fileSize: 1024 * 1024 * 50 } }) // 50MB cap
+
+app.get('/api/health', (_req, res) => {
+  res.json({ ok: true, repo: `${GH_OWNER}/${GH_REPO}`, branch: GH_BRANCH, path: GH_PATH, configured: !!GH_TOKEN })
+})
+
+app.get('/api/list', async (_req, res) => {
+  try {
+    if (!GH_OWNER || !GH_REPO) return res.status(400).json({ error: 'BadConfig', message: 'Missing owner/repo' })
+    const treeUrl = `https://api.github.com/repos/${GH_OWNER}/${GH_REPO}/git/trees/${encodeURIComponent(GH_BRANCH)}?recursive=1`
+    const headers = { Accept: 'application/vnd.github.v3+json' }
+    if (GH_TOKEN) headers.Authorization = `Bearer ${GH_TOKEN}`
+    const tres = await fetch(treeUrl, { headers })
+    if (!tres.ok) {
+      const txt = await tres.text().catch(() => '')
+      return res.status(tres.status).send(txt)
+    }
+    const tdata = await tres.json()
+    const files = Array.isArray(tdata?.tree)
+      ? tdata.tree.filter(it => it.type === 'blob' && /\.pdf$/i.test(it.path)).map(it => ({
+          id: it.path,
+          path: it.path,
+          name: it.path.split('/').pop(),
+          url: `https://raw.githubusercontent.com/${GH_OWNER}/${GH_REPO}/${encodeURIComponent(GH_BRANCH)}/${it.path}`,
+          size: it.size,
+          sha: it.sha,
+        }))
+      : []
+    res.json(files)
+  } catch (e) {
+    console.error(e)
+    res.status(500).json({ error: 'ListError', message: e?.message || 'Unknown error' })
+  }
+})
+
+app.post('/api/upload', upload.single('file'), async (req, res) => {
+  try {
+    if (!GH_TOKEN) return res.status(500).json({ error: 'ServerNotConfigured', message: 'Missing GH_TOKEN on server' })
+    if (!GH_OWNER || !GH_REPO) return res.status(400).json({ error: 'BadConfig', message: 'Missing owner/repo' })
+    const file = req.file
+    if (!file) return res.status(400).json({ error: 'NoFile', message: 'No file provided' })
+
+    const safeName = (file.originalname || 'document.pdf').replace(/\s+/g, '_')
+    const basePath = (GH_PATH ? GH_PATH.replace(/\/$/, '') + '/' : '')
+    const targetPath = basePath + safeName
+
+    // Convert buffer to base64
+    const b64 = file.buffer.toString('base64')
+
+    // Check if file exists to get sha
+    const checkUrl = `https://api.github.com/repos/${GH_OWNER}/${GH_REPO}/contents/${encodeURIComponent(targetPath)}?ref=${encodeURIComponent(GH_BRANCH)}`
+    let sha
+    {
+      const resp = await fetch(checkUrl, { headers: { Accept: 'application/vnd.github.v3+json', Authorization: `Bearer ${GH_TOKEN}` } })
+      if (resp.ok) {
+        const j = await resp.json()
+        sha = j.sha
+      }
+    }
+
+    const putUrl = `https://api.github.com/repos/${GH_OWNER}/${GH_REPO}/contents/${encodeURIComponent(targetPath)}`
+    const body = {
+      message: sha ? `Update ${safeName}` : `Upload ${safeName}`,
+      content: b64,
+      branch: GH_BRANCH,
+      ...(sha ? { sha } : {}),
+    }
+    const putResp = await fetch(putUrl, {
+      method: 'PUT',
+      headers: {
+        Accept: 'application/vnd.github.v3+json',
+        Authorization: `Bearer ${GH_TOKEN}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(body),
+    })
+    const txt = await putResp.text()
+    if (!putResp.ok) return res.status(putResp.status).send(txt)
+    const json = JSON.parse(txt)
+    return res.json({
+      path: json.content?.path || targetPath,
+      url: `https://raw.githubusercontent.com/${GH_OWNER}/${GH_REPO}/${encodeURIComponent(GH_BRANCH)}/${targetPath}`,
+      sha: json.content?.sha,
+    })
+  } catch (e) {
+    console.error(e)
+    res.status(500).json({ error: 'UploadError', message: e?.message || 'Unknown error' })
+  }
+})
+
+const port = process.env.PORT || 8787
+app.listen(port, () => {
+  console.log(`Upload server listening on http://localhost:${port}`)
+})
