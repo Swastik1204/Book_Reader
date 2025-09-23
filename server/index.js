@@ -15,6 +15,14 @@ const GH_TOKEN = process.env.GH_TOKEN
 const app = express()
 app.use(cors())
 
+// Simple API request logger (only for /api/*)
+app.use((req, _res, next) => {
+  if (req.path.startsWith('/api/')) {
+    console.log(`[api] ${req.method} ${req.path}`)
+  }
+  next()
+})
+
 // Serve static frontend (dist folder) if it exists (Render build step produced it)
 const distDir = path.resolve(process.cwd(), 'dist')
 if (fs.existsSync(distDir)) {
@@ -109,6 +117,12 @@ app.post('/api/upload', upload.single('file'), async (req, res) => {
     console.error(e)
     res.status(500).json({ error: 'UploadError', message: e?.message || 'Unknown error' })
   }
+})
+
+// Unknown API route handler (must come after known routes)
+app.use('/api', (req, res, next) => {
+  if (req.path === '/' || req.path === '') return next()
+  res.status(404).json({ error: 'NotFound', path: req.originalUrl })
 })
 
 // SPA fallback: for any non-API GET request, serve index.html (only if dist exists)
