@@ -119,6 +119,47 @@ app.post('/api/upload', upload.single('file'), async (req, res) => {
   }
 })
 
+// PDF proxy: serve GitHub raw content with inline headers for iframe viewing
+app.get('/api/pdf', async (req, res) => {
+  try {
+    const p = (req.query.path || '').toString()
+    if (!p) return res.status(400).json({ error: 'BadRequest', message: 'Missing path query parameter' })
+    if (p.includes('..')) return res.status(400).json({ error: 'BadPath', message: 'Invalid path' })
+
+    // Encode each path segment to preserve slashes while handling spaces etc.
+    const safePath = p.split('/').map(encodeURIComponent).join('/')
+    const rawUrl = `https://raw.githubusercontent.com/${GH_OWNER}/${GH_REPO}/${encodeURIComponent(GH_BRANCH)}/${safePath}`
+
+    const headers = { Accept: 'application/octet-stream' }
+    if (req.headers.range) headers.Range = req.headers.range
+
+    const upstream = await fetch(rawUrl, { headers })
+
+    // Forward status; set headers conducive to inline PDF rendering
+    res.status(upstream.status)
+
+    // Copy relevant headers if present
+    const passHeaders = ['content-length', 'content-range', 'accept-ranges', 'etag', 'last-modified']
+    passHeaders.forEach((h) => {
+      const v = upstream.headers.get(h)
+      if (v) res.setHeader(h, v)
+    })
+
+    const name = p.split('/').pop() || 'document.pdf'
+    res.setHeader('Content-Type', 'application/pdf')
+    res.setHeader('Content-Disposition', `inline; filename="${name.replace(/"/g, '')}"`)
+
+    if (!upstream.body) {
+      return res.end()
+    }
+    // Stream the body to the client
+    upstream.body.pipe(res)
+  } catch (e) {
+    console.error(e)
+    res.status(500).json({ error: 'PdfProxyError', message: e?.message || 'Unknown error' })
+  }
+})
+
 // Unknown API route handler (must come after known routes)
 app.use('/api', (req, res, next) => {
   if (req.path === '/' || req.path === '') return next()

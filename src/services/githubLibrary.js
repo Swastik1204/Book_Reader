@@ -95,8 +95,23 @@ export async function listPdfs() {
 }
 
 export async function getPdfUrl(item) {
-  // item.url already points to raw content
-  return item.url
+  // Prefer serving via our API to set Content-Disposition inline, improving iframe behavior.
+  // If VITE_API_BASE is set or we're running from the same origin as the API, construct a proxy URL.
+  try {
+    const apiBase = (import.meta.env.VITE_API_BASE && import.meta.env.VITE_API_BASE.trim()) || ''
+    const url = new URL(item.url)
+    // Extract path relative to repo root (item.path already has it)
+    const relPath = item.path || decodeURIComponent(url.pathname.split('/').slice(5).join('/'))
+    const base = apiBase || ''
+    if (base) {
+      return `${base.replace(/\/$/, '')}/api/pdf?path=${encodeURIComponent(relPath)}`
+    }
+    // If no explicit base, assume same-origin API exists (production). Use relative path.
+    return `/api/pdf?path=${encodeURIComponent(relPath)}`
+  } catch {
+    // Fallback to raw URL
+    return item.url
+  }
 }
 
 export async function uploadPdf(file) {
