@@ -30,6 +30,8 @@ export default defineConfig({
       },
       workbox: {
         globPatterns: ['**/*.{js,css,html,svg,png,ico}'],
+        // Prevent SPA navigation fallback from catching API requests (like /api/pdf)
+        navigateFallbackDenylist: [/^\/api\//],
       },
       assetsGenerator: undefined,
     }),
