@@ -4,6 +4,7 @@ import cors from 'cors'
 import multer from 'multer'
 import path from 'path'
 import fs from 'fs'
+import { Readable } from 'node:stream'
 
 // Server-side configuration via environment variables
 const GH_OWNER = process.env.GH_OWNER || process.env.VITE_GH_OWNER
@@ -130,7 +131,11 @@ app.get('/api/pdf', async (req, res) => {
     const safePath = p.split('/').map(encodeURIComponent).join('/')
     const rawUrl = `https://raw.githubusercontent.com/${GH_OWNER}/${GH_REPO}/${encodeURIComponent(GH_BRANCH)}/${safePath}`
 
-    const headers = { Accept: 'application/octet-stream' }
+    const headers = { 
+      Accept: 'application/pdf',
+      // Some upstreams behave better with an explicit UA
+      'User-Agent': 'BookReader/1.0 (+https://book-reader-lcfo.onrender.com)',
+    }
     if (req.headers.range) headers.Range = req.headers.range
 
     const upstream = await fetch(rawUrl, { headers })
@@ -149,11 +154,24 @@ app.get('/api/pdf', async (req, res) => {
     res.setHeader('Content-Type', 'application/pdf')
     res.setHeader('Content-Disposition', `inline; filename="${name.replace(/"/g, '')}"`)
 
-    if (!upstream.body) {
-      return res.end()
+    // Stream the body to the client; Node fetch returns a Web ReadableStream
+    if (upstream.body) {
+      try {
+        const nodeStream = Readable.fromWeb(upstream.body)
+        nodeStream.on('error', (err) => {
+          console.error('Proxy stream error:', err)
+          try { res.destroy(err) } catch {}
+        })
+        nodeStream.pipe(res)
+      } catch (err) {
+        console.warn('fromWeb failed, buffering response:', err?.message)
+        const ab = await upstream.arrayBuffer().catch(() => null)
+        if (ab) res.end(Buffer.from(ab))
+        else res.end()
+      }
+    } else {
+      res.end()
     }
-    // Stream the body to the client
-    upstream.body.pipe(res)
   } catch (e) {
     console.error(e)
     res.status(500).json({ error: 'PdfProxyError', message: e?.message || 'Unknown error' })
